@@ -1,7 +1,8 @@
 """MCP サーバー一覧・検索 API エンドポイント"""
 
 from typing import Optional
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
+from app.auth import verify_api_key
 from app.db import get_supabase
 from app.models import MCPServer, MCPServerList
 
@@ -20,6 +21,7 @@ async def list_servers(
     sort: str = Query("stars", description="ソート項目 (stars/name/last_crawled_at)"),
     page: int = Query(1, ge=1, description="ページ番号"),
     per_page: int = Query(20, ge=1, le=100, description="1ページの件数"),
+    _: dict = Depends(verify_api_key),
 ):
     if category and category not in VALID_CATEGORIES:
         raise HTTPException(status_code=400, detail=f"Invalid category. Valid: {sorted(VALID_CATEGORIES)}")
@@ -62,7 +64,10 @@ async def list_servers(
 
 
 @router.get("/{server_id}", response_model=MCPServer, summary="MCP サーバー詳細取得")
-async def get_server(server_id: str):
+async def get_server(
+    server_id: str,
+    _: dict = Depends(verify_api_key),
+):
     db = get_supabase()
     result = db.table("mcp_servers_with_health").select("*").eq("id", server_id).execute()
     if not result.data:
@@ -74,6 +79,7 @@ async def get_server(server_id: str):
 async def get_health_history(
     server_id: str,
     limit: int = Query(50, ge=1, le=200, description="取得件数"),
+    _: dict = Depends(verify_api_key),
 ):
     db = get_supabase()
     # サーバー存在確認

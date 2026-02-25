@@ -3,13 +3,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import servers, admin
+from app.routers import servers, admin, auth
 
 app = FastAPI(
     title="MCPHub API",
     description=(
         "MCP (Model Context Protocol) サーバーのディレクトリ＆稼働監視 API。\n\n"
         "GitHub から公開 MCP サーバーを自動収集し、毎時ヘルスチェックした結果を提供します。\n\n"
+        "## はじめかた\n"
+        "1. `POST /auth/register` にメールアドレスを送信してAPIキーを取得\n"
+        "2. 各リクエストに `X-API-Key: <your_key>` ヘッダーを付与\n\n"
         "**料金プラン**\n"
         "- Free: 月 100 リクエスト\n"
         "- Basic ($9/月): 月 5,000 リクエスト\n"
@@ -31,6 +34,7 @@ app.add_middleware(
 )
 
 # ルーター登録
+app.include_router(auth.router)
 app.include_router(servers.router)
 app.include_router(admin.router)
 
@@ -42,10 +46,13 @@ async def root():
         "version": "0.1.0",
         "description": "MCP Server Directory & Health Check API",
         "docs": "/docs",
+        "get_started": "POST /auth/register to get your free API key",
         "endpoints": {
-            "servers": "/servers",
-            "server_detail": "/servers/{id}",
-            "health_history": "/servers/{id}/health-history",
+            "register": "POST /auth/register",
+            "usage": "GET /auth/usage",
+            "servers": "GET /servers",
+            "server_detail": "GET /servers/{id}",
+            "health_history": "GET /servers/{id}/health-history",
         },
     }
 

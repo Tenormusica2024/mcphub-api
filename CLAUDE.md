@@ -65,11 +65,8 @@ https://mcphub-api-ycqe3vmjva-an.a.run.app
 
 ## TODO
 
-### 🔴 実装（GTM前に必要）
-- [ ] **APIキー発行フロー** - ユーザーが自分でAPIキーを取得できるエンドポイント実装
-  - `POST /auth/register`（メールアドレス → APIキー発行）
-  - `api_keys` テーブルはあるが発行ロジックがまだない
-  - 有料プランへのアップグレード導線も必要
+### 🟢 実装完了
+- [x] **APIキー発行フロー** - `POST /auth/register`, `GET /auth/usage`, 全エンドポイントで `X-API-Key` 認証
 
 ### 🟡 GTM（マーケティング）
 - [ ] **r/mcp（Reddit）投稿** - ベータユーザー募集。ゴール: 200人獲得
