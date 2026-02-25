@@ -4,6 +4,10 @@ MCP (Model Context Protocol) サーバーのディレクトリ＆稼働監視 AP
 
 GitHub から公開 MCP サーバーを自動収集し、毎時ヘルスチェックした結果を REST API で提供します。
 
+**本番 URL**: `https://mcphub-api-ycqe3vmjva-an.a.run.app`
+- API ドキュメント: https://mcphub-api-ycqe3vmjva-an.a.run.app/docs
+- ヘルスチェック: https://mcphub-api-ycqe3vmjva-an.a.run.app/health
+
 ## エンドポイント
 
 | エンドポイント | 説明 |
