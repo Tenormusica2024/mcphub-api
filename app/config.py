@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_anon_key: str
     supabase_service_key: str
-    github_tokens: str = ""          # カンマ区切り複数トークン
+    gh_tokens: str = ""              # カンマ区切り複数トークン（GH_TOKENS 環境変数）
     api_secret_key: str = "dev-secret"
     admin_api_key: str = "dev-admin"
     crawl_max_servers: int = 500
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
 
     def github_token_list(self) -> list[str]:
         """GitHubトークンをリストとして返す"""
-        return [t.strip() for t in self.github_tokens.split(",") if t.strip()]
+        return [t.strip() for t in self.gh_tokens.split(",") if t.strip()]
 
 
 settings = Settings()
