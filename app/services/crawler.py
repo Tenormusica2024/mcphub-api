@@ -1,13 +1,17 @@
 """GitHub API を使った MCP サーバークローラー"""
 
 import asyncio
+import logging
 import time
 from datetime import datetime, timezone
+from typing import TypedDict
 
 import httpx
 
 from app.config import settings
 from app.db import get_supabase
+
+logger = logging.getLogger(__name__)
 
 # MCPサーバーを発見するためのGitHub検索クエリ群
 SEARCH_QUERIES = [
@@ -23,6 +27,17 @@ HEADERS_BASE = {
     "Accept": "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
 }
+
+
+class RepoData(TypedDict):
+    """GitHub Search API のリポジトリデータ"""
+    html_url: str
+    name: str
+    description: str | None
+    stargazers_count: int
+    topics: list[str]
+    archived: bool
+    owner: dict
 
 
 def _get_rotating_token(index: int) -> str | None:
@@ -46,12 +61,12 @@ async def _search_repos(
     query: str,
     max_results: int,
     token_index: int,
-) -> list[dict]:
+) -> list[RepoData]:
     """GitHub Search APIでリポジトリを検索して返す"""
-    repos = []
+    repos: list[RepoData] = []
     page = 1
     per_page = 100
-    # 403レート制限に対するリトライ上限（トークン数 + バッファ）
+    # トークン数 + 2: 全トークンを試した上でさらに2回バッファを持たせる
     max_retries_on_403 = max(len(settings.github_token_list()), 1) + 2
     retries_on_403 = 0
 
@@ -70,6 +85,7 @@ async def _search_repos(
                 # レート制限 → 別トークンでリトライ（上限を超えたら中断）
                 retries_on_403 += 1
                 if retries_on_403 > max_retries_on_403:
+                    logger.warning("GitHub 403 rate limit exceeded after %d retries, stopping query: %s", retries_on_403, query)
                     break
                 token_index += 1
                 await asyncio.sleep(2)
@@ -84,9 +100,11 @@ async def _search_repos(
                 break
             page += 1
             await asyncio.sleep(0.5)  # レート制限対策
-        except httpx.HTTPStatusError:
+        except httpx.HTTPStatusError as e:
+            logger.warning("GitHub API HTTP error for query '%s': %s", query, e)
             break
-        except Exception:
+        except Exception as e:
+            logger.error("Unexpected error during GitHub search for query '%s': %s", query, e, exc_info=True)
             break
 
     return repos[:max_results]
@@ -118,7 +136,7 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
     start_time = time.time()
     db = get_supabase()
 
-    all_repos: dict[str, dict] = {}  # repo_url → repo_data（重複排除）
+    all_repos: dict[str, RepoData] = {}  # repo_url → repo_data（重複排除）
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         for i, query in enumerate(SEARCH_QUERIES):
@@ -138,8 +156,10 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
 
     repos_to_process = list(all_repos.values())[:max_servers]
 
-    # upsert前の件数を記録（新規追加数の算出に使用）
-    count_before = db.table("mcp_servers").select("id", count="exact").execute().count or 0
+    # upsert前の件数を取得（head=True でデータ転送なし・カウントのみ）
+    count_before = (
+        db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
+    )
 
     for repo in repos_to_process:
         topics = repo.get("topics", [])
@@ -167,10 +187,12 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
                 on_conflict="repo_url",
             ).execute()
         except Exception as e:
-            print(f"[WARN] DB upsert failed for {repo_url}: {type(e).__name__}: {e}", flush=True)
+            logger.warning("DB upsert failed for %s: %s: %s", repo_url, type(e).__name__, e, exc_info=True)
 
-    # upsert後の件数で新規追加数を算出
-    count_after = db.table("mcp_servers").select("id", count="exact").execute().count or 0
+    # upsert後の件数で新規追加数を算出（head=True でデータ転送なし）
+    count_after = (
+        db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
+    )
     new_count = max(count_after - count_before, 0)
     updated_count = len(repos_to_process) - new_count
     duration = time.time() - start_time

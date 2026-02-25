@@ -30,7 +30,7 @@ app.add_middleware(
     allow_origins=["*"],
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["X-API-Key", "Content-Type"],
 )
 
 # ルーター登録

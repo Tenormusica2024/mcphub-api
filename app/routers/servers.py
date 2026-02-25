@@ -1,5 +1,6 @@
 """MCP サーバー一覧・検索 API エンドポイント"""
 
+import re
 from typing import Optional
 from fastapi import APIRouter, Query, HTTPException, Depends
 from app.auth import verify_api_key
@@ -39,8 +40,8 @@ async def list_servers(
     if category:
         query = query.eq("category", category)
     if q:
-        # 長さ制限（100文字）とPostgRESTフィルタ特殊文字の除去（,と.はフィルタ構文に使用される）
-        q_safe = q.strip()[:100].replace(",", "").replace(".", "")
+        # 英数字・スペース・ハイフン・アンダースコアのみ許可（PostgREST構文バイパス防止）
+        q_safe = re.sub(r"[^\w\s\-]", "", q.strip())[:100]
         if q_safe:
             query = query.or_(f"name.ilike.%{q_safe}%,description.ilike.%{q_safe}%")
     if health:

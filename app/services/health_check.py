@@ -9,11 +9,6 @@ import httpx
 from app.config import settings
 from app.db import get_supabase
 
-# MCPサーバーが提供する可能性のある標準エンドポイント一覧
-# （まずGitHub APIのping、次にリポジトリの公開URLを確認）
-HEALTH_CHECK_PATHS = ["/health", "/", "/ping", "/status"]
-
-
 async def _check_single_server(
     client: httpx.AsyncClient,
     server: dict,

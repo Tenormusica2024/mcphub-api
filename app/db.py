@@ -1,4 +1,8 @@
-"""Supabase クライアント初期化"""
+"""Supabase クライアント初期化
+
+NOTE: グローバルシングルトンを使用しているため単体テストでのモックが困難。
+      将来的には FastAPI の lifespan + Depends に移行して DI 可能にすること。
+"""
 
 from supabase import create_client, Client
 from app.config import settings
