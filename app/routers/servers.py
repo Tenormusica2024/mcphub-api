@@ -9,6 +9,7 @@ router = APIRouter(prefix="/servers", tags=["servers"])
 
 VALID_CATEGORIES = {"database", "browser", "filesystem", "code", "productivity", "api", "search", "other"}
 VALID_SORT = {"stars", "name", "last_crawled_at"}
+VALID_HEALTH = {"up", "down", "unknown"}
 
 
 @router.get("", response_model=MCPServerList, summary="MCP サーバー一覧取得")
@@ -24,6 +25,8 @@ async def list_servers(
         raise HTTPException(status_code=400, detail=f"Invalid category. Valid: {sorted(VALID_CATEGORIES)}")
     if sort not in VALID_SORT:
         raise HTTPException(status_code=400, detail=f"Invalid sort. Valid: {sorted(VALID_SORT)}")
+    if health and health not in VALID_HEALTH:
+        raise HTTPException(status_code=400, detail=f"Invalid health. Valid: {sorted(VALID_HEALTH)}")
 
     db = get_supabase()
     offset = (page - 1) * per_page
@@ -34,12 +37,14 @@ async def list_servers(
     if category:
         query = query.eq("category", category)
     if q:
-        # supabaseはilike（大文字小文字無視の部分一致）をサポート
-        query = query.or_(f"name.ilike.%{q}%,description.ilike.%{q}%")
+        # 長さ制限（100文字）とPostgRESTフィルタ特殊文字の除去（,と.はフィルタ構文に使用される）
+        q_safe = q.strip()[:100].replace(",", "").replace(".", "")
+        if q_safe:
+            query = query.or_(f"name.ilike.%{q_safe}%,description.ilike.%{q_safe}%")
     if health:
         query = query.eq("health_status", health)
 
-    # ソート
+    # ソート（starsは降順、その他は昇順）
     query = query.order(sort, desc=(sort == "stars"))
 
     # ページネーション

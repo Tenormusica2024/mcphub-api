@@ -5,7 +5,4 @@ supabase==2.11.0
 python-dotenv==1.0.1
 pydantic==2.10.4
 pydantic-settings==2.7.0
-slowapi==0.1.9          # レート制限
-python-jose[cryptography]==3.3.0  # JWT検証
-passlib[bcrypt]==1.7.4  # パスワード/APIキーハッシュ
-anyio==4.7.0            # 非同期サポート
+anyio==4.7.0

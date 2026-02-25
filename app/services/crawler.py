@@ -1,7 +1,6 @@
 """GitHub API を使った MCP サーバークローラー"""
 
 import asyncio
-import itertools
 import time
 from datetime import datetime, timezone
 
@@ -52,6 +51,9 @@ async def _search_repos(
     repos = []
     page = 1
     per_page = 100
+    # 403レート制限に対するリトライ上限（トークン数 + バッファ）
+    max_retries_on_403 = max(len(settings.github_token_list()), 1) + 2
+    retries_on_403 = 0
 
     while len(repos) < max_results:
         url = f"{GITHUB_API_BASE}/search/repositories"
@@ -65,7 +67,10 @@ async def _search_repos(
         try:
             resp = await client.get(url, headers=_make_headers(token_index), params=params)
             if resp.status_code == 403:
-                # レート制限 → 別トークンでリトライ
+                # レート制限 → 別トークンでリトライ（上限を超えたら中断）
+                retries_on_403 += 1
+                if retries_on_403 > max_retries_on_403:
+                    break
                 token_index += 1
                 await asyncio.sleep(2)
                 continue
@@ -131,10 +136,10 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
                 break
             await asyncio.sleep(1)
 
-    # Supabaseに保存
-    new_count = 0
-    updated_count = 0
     repos_to_process = list(all_repos.values())[:max_servers]
+
+    # upsert前の件数を記録（新規追加数の算出に使用）
+    count_before = db.table("mcp_servers").select("id", count="exact").execute().count or 0
 
     for repo in repos_to_process:
         topics = repo.get("topics", [])
@@ -157,29 +162,23 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
         }
 
         try:
-            # upsert（既存ならupdate、なければinsert）
-            result = db.table("mcp_servers").upsert(
+            db.table("mcp_servers").upsert(
                 server_data,
                 on_conflict="repo_url",
             ).execute()
+        except Exception as e:
+            print(f"[WARN] DB upsert failed for {repo_url}: {type(e).__name__}: {e}", flush=True)
 
-            # 新規 or 更新を判別（supabaseはupsertで両方返す）
-            if result.data:
-                existing = db.table("mcp_servers").select("id").eq("repo_url", repo_url).execute()
-                if len(existing.data) == 1:
-                    # 既存レコードかどうかはcreated_atで判別しにくいのでとりあえずupdatedとして計上
-                    updated_count += 1
-        except Exception:
-            pass
-
-    # 実際の新規/更新数はupsertでは分離困難なため概算
-    total_in_db = db.table("mcp_servers").select("id", count="exact").execute()
+    # upsert後の件数で新規追加数を算出
+    count_after = db.table("mcp_servers").select("id", count="exact").execute().count or 0
+    new_count = max(count_after - count_before, 0)
+    updated_count = len(repos_to_process) - new_count
     duration = time.time() - start_time
 
     return {
         "total_found": len(repos_to_process),
         "new_servers": new_count,
         "updated_servers": updated_count,
-        "total_in_db": total_in_db.count or 0,
+        "total_in_db": count_after,
         "duration_sec": round(duration, 2),
     }

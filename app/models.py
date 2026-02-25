@@ -5,12 +5,6 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class HealthStatus(BaseModel):
-    status: str           # "up" | "down" | "unknown"
-    response_time_ms: Optional[int] = None
-    checked_at: Optional[datetime] = None
-
-
 class MCPServer(BaseModel):
     id: str
     name: str
@@ -26,7 +20,7 @@ class MCPServer(BaseModel):
     health_check_opt_in: bool = True
     last_crawled_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
-    # ヘルスチェック情報（ビューから取得）
+    # ヘルスチェック情報（mcp_servers_with_health ビューから取得）
     health_status: Optional[str] = None
     last_response_time_ms: Optional[int] = None
     last_health_check_at: Optional[datetime] = None

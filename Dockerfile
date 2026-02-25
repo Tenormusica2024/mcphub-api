@@ -9,6 +9,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # アプリケーションをコピー
 COPY app/ ./app/
 
+# 非rootユーザーで実行（コンテナ侵害時の権限昇格を防ぐ）
+RUN useradd --no-create-home --shell /bin/false appuser
+USER appuser
+
 # Cloud Run は PORT 環境変数を使用する
 ENV PORT=8080
 EXPOSE 8080
