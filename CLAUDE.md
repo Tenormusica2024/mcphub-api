@@ -60,3 +60,22 @@ https://mcphub-api-ycqe3vmjva-an.a.run.app
 ### git push の前に確認
 - health_check.py が Opt-in フラグを参照しているか
 - crawler.py が個人情報をフィルタしているか
+
+---
+
+## TODO
+
+### 🔴 実装（GTM前に必要）
+- [ ] **APIキー発行フロー** - ユーザーが自分でAPIキーを取得できるエンドポイント実装
+  - `POST /auth/register`（メールアドレス → APIキー発行）
+  - `api_keys` テーブルはあるが発行ロジックがまだない
+  - 有料プランへのアップグレード導線も必要
+
+### 🟡 GTM（マーケティング）
+- [ ] **r/mcp（Reddit）投稿** - ベータユーザー募集。ゴール: 200人獲得
+- [ ] **MCP Discord 投稿** - `#show-and-tell` にデモ投稿。ゴール: 200人獲得
+- [ ] **X/Twitter スレッド** - `#MCP #AIAgents` タグで発信。毎日投稿へ
+
+### 🟢 任意・改善
+- [ ] **GH_TOKENS 設定** - GitHub PAT を登録するとクローラーのレート制限が5倍に向上（現在: 60 req/h → 5,000 req/h）
+- [ ] **smithery.ai 連携打診** - 相互紹介・提携検討（Month 2〜3 目標）
