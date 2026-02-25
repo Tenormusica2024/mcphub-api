@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS mcp_servers (
     topics TEXT[],   -- GitHubトピックタグ
     readme_summary TEXT,  -- READMEから抽出した概要
     is_active BOOLEAN DEFAULT true,
+    health_check_opt_in BOOLEAN DEFAULT true,  -- trueのサーバーのみヘルスチェック対象
     last_crawled_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_category ON mcp_servers(category);
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_stars ON mcp_servers(stars DESC);
 CREATE INDEX IF NOT EXISTS idx_mcp_servers_is_active ON mcp_servers(is_active);
+CREATE INDEX IF NOT EXISTS idx_mcp_servers_health_check_opt_in ON mcp_servers(health_check_opt_in);
 CREATE INDEX IF NOT EXISTS idx_health_checks_server_id ON health_checks(server_id);
 CREATE INDEX IF NOT EXISTS idx_health_checks_checked_at ON health_checks(checked_at DESC);
 CREATE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash);

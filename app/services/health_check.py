@@ -77,8 +77,8 @@ async def run_health_checks(server_ids: list[str] | None = None) -> dict:
     concurrency = settings.health_check_concurrency
     timeout = settings.health_check_timeout_sec
 
-    # 対象サーバーを取得
-    query = db.table("mcp_servers").select("id,name,repo_url")
+    # 対象サーバーを取得（health_check_opt_in=true のサーバーのみ）
+    query = db.table("mcp_servers").select("id,name,repo_url").eq("health_check_opt_in", True)
     if server_ids:
         query = query.in_("id", server_ids)
     else:

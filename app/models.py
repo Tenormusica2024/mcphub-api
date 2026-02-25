@@ -23,6 +23,7 @@ class MCPServer(BaseModel):
     topics: list[str] = []
     readme_summary: Optional[str] = None
     is_active: bool = True
+    health_check_opt_in: bool = True
     last_crawled_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     # ヘルスチェック情報（ビューから取得）
