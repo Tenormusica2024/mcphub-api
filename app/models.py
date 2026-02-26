@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 
 class MCPServer(BaseModel):
@@ -46,3 +46,20 @@ class HealthCheckResult(BaseModel):
     up: int
     down: int
     unknown: int
+
+
+class RegisterResponse(BaseModel):
+    api_key: str
+    plan: str
+    monthly_limit: int
+    warning: str
+    usage: str
+
+
+class UsageResponse(BaseModel):
+    email: EmailStr
+    plan: str
+    req_count: int
+    req_limit: int
+    last_reset_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None

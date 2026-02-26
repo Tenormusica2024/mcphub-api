@@ -59,7 +59,11 @@ async def list_servers(
     # ページネーション
     query = query.range(offset, offset + per_page - 1)
 
-    result = query.execute()
+    try:
+        result = query.execute()
+    except Exception as e:
+        logger.error("mcp_servers_with_health query failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     items = [MCPServer(**row) for row in (result.data or [])]
 
     return MCPServerList(
@@ -76,7 +80,11 @@ async def get_server(
     _: dict = Depends(verify_api_key),
 ):
     db = get_supabase()
-    result = db.table("mcp_servers_with_health").select("*").eq("id", str(server_id)).execute()
+    try:
+        result = db.table("mcp_servers_with_health").select("*").eq("id", str(server_id)).execute()
+    except Exception as e:
+        logger.error("mcp_servers_with_health lookup failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     if not result.data:
         raise HTTPException(status_code=404, detail="Server not found")
     return MCPServer(**result.data[0])

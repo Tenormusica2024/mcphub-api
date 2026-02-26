@@ -4,6 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import servers, admin, auth
+from app.db import get_supabase
+
+APP_VERSION = "0.1.0"
 
 app = FastAPI(
     title="MCPHub API",
@@ -19,7 +22,7 @@ app = FastAPI(
         "- Pro ($19/月): 月 30,000 リクエスト + ヘルスアラート\n"
         "- Enterprise ($49/月): 無制限 + SLA + 専用サポート"
     ),
-    version="0.1.0",
+    version=APP_VERSION,
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -43,7 +46,7 @@ app.include_router(admin.router)
 async def root():
     return {
         "name": "MCPHub API",
-        "version": "0.1.0",
+        "version": APP_VERSION,
         "description": "MCP Server Directory & Health Check API",
         "docs": "/docs",
         "get_started": "POST /auth/register to get your free API key",
@@ -59,4 +62,10 @@ async def root():
 
 @app.get("/health", summary="サービスヘルスチェック")
 async def health():
-    return {"status": "ok"}
+    """API サーバーと Supabase の疎通を確認します。DB 障害時は 503 を返します。"""
+    db = get_supabase()
+    try:
+        db.table("api_keys").select("id", count="exact", head=True).execute()
+    except Exception:
+        return {"status": "degraded", "db": "unreachable"}, 503
+    return {"status": "ok", "db": "reachable"}

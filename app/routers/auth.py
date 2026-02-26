@@ -6,6 +6,7 @@ from pydantic import BaseModel, EmailStr
 
 from app.auth import generate_api_key, hash_api_key, verify_api_key_readonly
 from app.db import get_supabase
+from app.models import RegisterResponse, UsageResponse
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ class RegisterRequest(BaseModel):
     email: EmailStr
 
 
-@router.post("/register", summary="APIキー発行（無料）")
+@router.post("/register", summary="APIキー発行（無料）", response_model=RegisterResponse)
 async def register(body: RegisterRequest):
     """
     メールアドレスを登録してAPIキーを発行します。
@@ -82,7 +83,7 @@ async def register(body: RegisterRequest):
     }
 
 
-@router.get("/usage", summary="API利用状況確認")
+@router.get("/usage", summary="API利用状況確認", response_model=UsageResponse)
 async def get_usage(record: dict = Depends(verify_api_key_readonly)):
     """現在のプランと今月の利用状況を返します。"""
     return {
