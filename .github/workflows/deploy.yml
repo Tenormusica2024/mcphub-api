@@ -38,7 +38,6 @@ jobs:
             --set-env-vars "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}" \
             --set-env-vars "SUPABASE_SERVICE_KEY=${{ secrets.SUPABASE_SERVICE_KEY }}" \
             --set-env-vars "GH_TOKENS=${{ secrets.GH_TOKENS }}" \
-            --set-env-vars "API_SECRET_KEY=${{ secrets.API_SECRET_KEY }}" \
             --set-env-vars "ADMIN_API_KEY=${{ secrets.ADMIN_API_KEY }}" \
             --min-instances 0 \
             --max-instances 3 \

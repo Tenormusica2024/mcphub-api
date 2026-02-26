@@ -1,11 +1,14 @@
 """APIキー発行・利用状況確認エンドポイント"""
 
+import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
-from app.auth import generate_api_key, hash_api_key, verify_api_key
+from app.auth import generate_api_key, hash_api_key, verify_api_key, verify_api_key_readonly
 from app.db import get_supabase
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -44,15 +47,19 @@ async def register(body: RegisterRequest):
         )
 
     raw_key = generate_api_key()
-    db.table("api_keys").insert({
-        "user_email": body.email,
-        "key_hash": hash_api_key(raw_key),
-        "plan": "free",
-        "req_count": 0,
-        "req_limit": PLAN_LIMITS["free"],
-        "last_reset_at": datetime.now(timezone.utc).isoformat(),
-        "is_active": True,
-    }).execute()
+    try:
+        db.table("api_keys").insert({
+            "user_email": body.email,
+            "key_hash": hash_api_key(raw_key),
+            "plan": "free",
+            "req_count": 0,
+            "req_limit": PLAN_LIMITS["free"],
+            "last_reset_at": datetime.now(timezone.utc).isoformat(),
+            "is_active": True,
+        }).execute()
+    except Exception as e:
+        logger.error("Failed to insert api_key for %s: %s", body.email, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Failed to create API key. Please try again.")
 
     return {
         "api_key": raw_key,
@@ -64,7 +71,7 @@ async def register(body: RegisterRequest):
 
 
 @router.get("/usage", summary="API利用状況確認")
-async def get_usage(record: dict = Depends(verify_api_key)):
+async def get_usage(record: dict = Depends(verify_api_key_readonly)):
     """現在のプランと今月の利用状況を返します。"""
     return {
         "email": record["user_email"],

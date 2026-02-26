@@ -66,7 +66,10 @@ async def _check_single_server(
 async def run_health_checks(server_ids: list[str] | None = None) -> dict:
     """
     全サーバー（または指定サーバー）のヘルスチェックを並列実行。
-    結果をhealth_checksテーブルに保存し、mcp_serversのis_activeを更新する。
+    結果を health_checks テーブルに保存し、mcp_servers.is_active を更新する。
+    - up → is_active = True
+    - down → is_active = False
+    - unknown → 変更しない（一時的なエラーでアクティブ状態を失わせない）
     """
     db = get_supabase()
     concurrency = settings.health_check_concurrency
@@ -84,7 +87,6 @@ async def run_health_checks(server_ids: list[str] | None = None) -> dict:
     if not servers:
         return {"checked": 0, "up": 0, "down": 0, "unknown": 0}
 
-    results = []
     semaphore = asyncio.Semaphore(concurrency)
 
     async def bounded_check(client: httpx.AsyncClient, server: dict) -> dict:
@@ -93,18 +95,26 @@ async def run_health_checks(server_ids: list[str] | None = None) -> dict:
 
     async with httpx.AsyncClient(timeout=timeout) as client:
         tasks = [bounded_check(client, s) for s in servers]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     # 正常な結果のみ抽出
-    valid_results = [r for r in results if isinstance(r, dict)]
+    valid_results = [r for r in raw_results if isinstance(r, dict)]
 
     # health_checks テーブルに一括保存
     if valid_results:
         db.table("health_checks").insert(valid_results).execute()
 
+    # mcp_servers.is_active を更新（up/down のみ、unknown は現状維持）
+    up_ids = [r["server_id"] for r in valid_results if r["status"] == "up"]
+    down_ids = [r["server_id"] for r in valid_results if r["status"] == "down"]
+    if up_ids:
+        db.table("mcp_servers").update({"is_active": True}).in_("id", up_ids).execute()
+    if down_ids:
+        db.table("mcp_servers").update({"is_active": False}).in_("id", down_ids).execute()
+
     # サマリー集計
-    up = sum(1 for r in valid_results if r["status"] == "up")
-    down = sum(1 for r in valid_results if r["status"] == "down")
+    up = len(up_ids)
+    down = len(down_ids)
     unknown = sum(1 for r in valid_results if r["status"] == "unknown")
 
     return {

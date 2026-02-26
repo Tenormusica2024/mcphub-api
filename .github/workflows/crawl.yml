@@ -30,8 +30,6 @@ jobs:
           SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
             --region $REGION \
             --format='value(status.url)')
-          curl -s -X POST "$SERVICE_URL/admin/crawl" \
-            -H "X-Admin-Key: ${{ secrets.ADMIN_API_KEY }}" \
-            -H "Content-Type: application/json" \
-            -d '{"max_servers": 500}'
+          curl -s -X POST "$SERVICE_URL/admin/crawl?max_servers=500" \
+            -H "X-Admin-Key: ${{ secrets.ADMIN_API_KEY }}"
           echo "Crawl triggered: $SERVICE_URL"

@@ -67,3 +67,31 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Ke
         )
 
     return data
+
+
+async def verify_api_key_readonly(x_api_key: Optional[str] = Header(None, alias="X-API-Key")) -> dict:
+    """
+    APIキー認証のみ（req_count をインクリメントしない）。
+    GET /auth/usage など「確認系」エンドポイント専用。
+    """
+    if not x_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing X-API-Key header. Register at POST /auth/register",
+        )
+
+    key_hash = hash_api_key(x_api_key)
+
+    try:
+        result = get_supabase().table("api_keys").select("*").eq("key_hash", key_hash).eq("is_active", True).execute()
+    except Exception as e:
+        logger.error("api_keys lookup failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
+
+    if not result.data:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or inactive API key. Register at POST /auth/register",
+        )
+
+    return result.data[0]

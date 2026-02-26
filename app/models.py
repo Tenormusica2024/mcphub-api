@@ -17,7 +17,7 @@ class MCPServer(BaseModel):
     topics: list[str] = []
     readme_summary: Optional[str] = None
     is_active: bool = True
-    health_check_opt_in: bool = True
+    health_check_opt_in: bool = False
     last_crawled_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     # ヘルスチェック情報（mcp_servers_with_health ビューから取得）
@@ -48,4 +48,5 @@ class CrawlResult(BaseModel):
     total_found: int
     new_servers: int
     updated_servers: int
+    total_in_db: int
     duration_sec: float
