@@ -85,7 +85,11 @@ async def run_health_checks(server_ids: list[str] | None = None) -> dict:
     else:
         query = query.eq("is_active", True)
 
-    servers = query.execute().data or []
+    try:
+        servers = query.execute().data or []
+    except Exception as e:
+        logger.error("health_check server list query failed: %s", e, exc_info=True)
+        return {"checked": 0, "up": 0, "down": 0, "unknown": 0}
 
     if not servers:
         return {"checked": 0, "up": 0, "down": 0, "unknown": 0}

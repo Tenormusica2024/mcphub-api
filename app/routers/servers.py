@@ -2,6 +2,7 @@
 
 import re
 from typing import Optional
+from uuid import UUID
 from fastapi import APIRouter, Query, HTTPException, Depends
 from app.auth import verify_api_key
 from app.db import get_supabase
@@ -66,11 +67,11 @@ async def list_servers(
 
 @router.get("/{server_id}", response_model=MCPServer, summary="MCP サーバー詳細取得")
 async def get_server(
-    server_id: str,
+    server_id: UUID,
     _: dict = Depends(verify_api_key),
 ):
     db = get_supabase()
-    result = db.table("mcp_servers_with_health").select("*").eq("id", server_id).execute()
+    result = db.table("mcp_servers_with_health").select("*").eq("id", str(server_id)).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Server not found")
     return MCPServer(**result.data[0])
@@ -78,22 +79,22 @@ async def get_server(
 
 @router.get("/{server_id}/health-history", summary="ヘルスチェック履歴取得")
 async def get_health_history(
-    server_id: str,
+    server_id: UUID,
     limit: int = Query(50, ge=1, le=200, description="取得件数"),
     _: dict = Depends(verify_api_key),
 ):
     db = get_supabase()
     # サーバー存在確認
-    server = db.table("mcp_servers").select("id").eq("id", server_id).execute()
+    server = db.table("mcp_servers").select("id").eq("id", str(server_id)).execute()
     if not server.data:
         raise HTTPException(status_code=404, detail="Server not found")
 
     history = (
         db.table("health_checks")
         .select("*")
-        .eq("server_id", server_id)
+        .eq("server_id", str(server_id))
         .order("checked_at", desc=True)
         .limit(limit)
         .execute()
     )
-    return {"server_id": server_id, "history": history.data or []}
+    return {"server_id": str(server_id), "history": history.data or []}

@@ -84,7 +84,9 @@ async def verify_api_key_readonly(x_api_key: Optional[str] = Header(None, alias=
     key_hash = hash_api_key(x_api_key)
 
     try:
-        result = get_supabase().table("api_keys").select("*").eq("key_hash", key_hash).eq("is_active", True).execute()
+        result = get_supabase().table("api_keys").select(
+            "user_email,plan,req_count,req_limit,last_reset_at,created_at"
+        ).eq("key_hash", key_hash).eq("is_active", True).execute()
     except Exception as e:
         logger.error("api_keys lookup failed: %s", e, exc_info=True)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")

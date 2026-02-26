@@ -20,7 +20,7 @@ def verify_admin_key(x_admin_key: Optional[str] = Header(None, alias="X-Admin-Ke
     return x_admin_key
 
 
-@router.post("/crawl", summary="GitHub APIクローラー起動（管理者専用）")
+@router.post("/crawl", summary="GitHub APIクローラー起動（管理者専用）", response_model=CrawlResult)
 async def trigger_crawl(
     max_servers: int = Query(default=500, ge=1, le=1000),
     _: str = Depends(verify_admin_key),

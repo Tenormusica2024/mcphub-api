@@ -5,7 +5,6 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     supabase_url: str
-    supabase_anon_key: str
     supabase_service_key: str
     gh_tokens: str = ""              # カンマ区切り複数トークン（GH_TOKENS 環境変数）
     admin_api_key: str               # 必須・デフォルト値なし（本番は必ず環境変数で設定すること）

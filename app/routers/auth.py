@@ -33,13 +33,17 @@ async def register(body: RegisterRequest):
     db = get_supabase()
 
     # 同一メールアドレスの既存キーチェック
-    existing = (
-        db.table("api_keys")
-        .select("id")
-        .eq("user_email", body.email)
-        .eq("is_active", True)
-        .execute()
-    )
+    try:
+        existing = (
+            db.table("api_keys")
+            .select("id")
+            .eq("user_email", body.email)
+            .eq("is_active", True)
+            .execute()
+        )
+    except Exception as e:
+        logger.error("api_keys SELECT failed for %s: %s", body.email, e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Failed to check existing registration. Please try again.")
     if existing.data:
         raise HTTPException(
             status_code=409,
@@ -58,6 +62,14 @@ async def register(body: RegisterRequest):
             "is_active": True,
         }).execute()
     except Exception as e:
+        # DB ユニーク制約違反 = 同時リクエストによる race condition → 409 として返す
+        err_lower = str(e).lower()
+        if "unique" in err_lower or "duplicate" in err_lower:
+            logger.warning("Duplicate registration detected for %s (race condition)", body.email)
+            raise HTTPException(
+                status_code=409,
+                detail="This email is already registered. If you lost your key, contact support.",
+            )
         logger.error("Failed to insert api_key for %s: %s", body.email, e, exc_info=True)
         raise HTTPException(status_code=503, detail="Failed to create API key. Please try again.")
 
