@@ -2,6 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.routers import servers, admin, auth
 from app.db import get_supabase
@@ -67,5 +68,5 @@ async def health():
     try:
         db.table("api_keys").select("id", count="exact", head=True).execute()
     except Exception:
-        return {"status": "degraded", "db": "unreachable"}, 503
+        return JSONResponse(status_code=503, content={"status": "degraded", "db": "unreachable"})
     return {"status": "ok", "db": "reachable"}
