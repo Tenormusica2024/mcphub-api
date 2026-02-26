@@ -39,3 +39,10 @@ class CrawlResult(BaseModel):
     updated_servers: int
     total_in_db: int
     duration_sec: float
+
+
+class HealthCheckResult(BaseModel):
+    checked: int
+    up: int
+    down: int
+    unknown: int

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from app.config import settings
 from app.services.crawler import crawl_mcp_servers
 from app.services.health_check import run_health_checks
-from app.models import CrawlResult
+from app.models import CrawlResult, HealthCheckResult
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -30,7 +30,7 @@ async def trigger_crawl(
     return result
 
 
-@router.post("/health-check", summary="ヘルスチェック起動（管理者専用）")
+@router.post("/health-check", summary="ヘルスチェック起動（管理者専用）", response_model=HealthCheckResult)
 async def trigger_health_check(_: str = Depends(verify_admin_key)):
     """全サーバーのヘルスチェックを並列実行する"""
     result = await run_health_checks()

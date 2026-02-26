@@ -1,5 +1,6 @@
 """MCP サーバー一覧・検索 API エンドポイント"""
 
+import logging
 import re
 from typing import Optional
 from uuid import UUID
@@ -7,6 +8,8 @@ from fastapi import APIRouter, Query, HTTPException, Depends
 from app.auth import verify_api_key
 from app.db import get_supabase
 from app.models import MCPServer, MCPServerList
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/servers", tags=["servers"])
 
@@ -43,6 +46,8 @@ async def list_servers(
     if q:
         # 英数字・スペース・ハイフン・アンダースコアのみ許可（PostgREST構文バイパス防止）
         q_safe = re.sub(r"[^\w\s\-]", "", q.strip())[:100]
+        # ILIKE の _ は「任意の1文字」ワイルドカードのため、リテラルとしてエスケープ
+        q_safe = q_safe.replace("_", r"\_")
         if q_safe:
             query = query.or_(f"name.ilike.%{q_safe}%,description.ilike.%{q_safe}%")
     if health:
@@ -85,16 +90,24 @@ async def get_health_history(
 ):
     db = get_supabase()
     # サーバー存在確認
-    server = db.table("mcp_servers").select("id").eq("id", str(server_id)).execute()
+    try:
+        server = db.table("mcp_servers").select("id").eq("id", str(server_id)).execute()
+    except Exception as e:
+        logger.error("mcp_servers lookup failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     if not server.data:
         raise HTTPException(status_code=404, detail="Server not found")
 
-    history = (
-        db.table("health_checks")
-        .select("*")
-        .eq("server_id", str(server_id))
-        .order("checked_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
+    try:
+        history = (
+            db.table("health_checks")
+            .select("*")
+            .eq("server_id", str(server_id))
+            .order("checked_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+    except Exception as e:
+        logger.error("health_checks query failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable")
     return {"server_id": str(server_id), "history": history.data or []}

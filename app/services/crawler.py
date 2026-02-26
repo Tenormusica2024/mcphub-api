@@ -115,7 +115,8 @@ def _classify_category(topics: list[str], name: str, description: str) -> str:
     text = " ".join(topics + [name, description or ""]).lower()
     if any(w in text for w in ["database", "db", "postgres", "sqlite", "mysql", "supabase"]):
         return "database"
-    if any(w in text for w in ["browser", "playwright", "puppeteer", "selenium", "web"]):
+    # "web" は汎用すぎるため除外。ブラウザ自動化ツール固有のキーワードのみを使用
+    if any(w in text for w in ["browser", "playwright", "puppeteer", "selenium", "headless", "screenshot"]):
         return "browser"
     if any(w in text for w in ["filesystem", "file", "disk", "storage", "s3"]):
         return "filesystem"
@@ -157,9 +158,14 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
     repos_to_process = list(all_repos.values())[:max_servers]
 
     # upsert前の件数を取得（head=True でデータ転送なし・カウントのみ）
-    count_before = (
-        db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
-    )
+    try:
+        count_before = (
+            db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
+        )
+    except Exception as e:
+        # 集計失敗でもクロール（upsert）は継続する
+        logger.warning("count_before query failed, defaulting to 0: %s", e)
+        count_before = 0
 
     # 全レコードを先にリスト化
     records = []
@@ -195,11 +201,16 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
             )
 
     # upsert後の件数で新規追加数を算出（head=True でデータ転送なし）
-    count_after = (
-        db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
-    )
+    try:
+        count_after = (
+            db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
+        )
+    except Exception as e:
+        logger.warning("count_after query failed, defaulting to count_before: %s", e)
+        count_after = count_before
     new_count = max(count_after - count_before, 0)
-    updated_count = len(repos_to_process) - new_count
+    # 並走クローラーによる count 乖離で負値にならないよう max(0, ...) でガード
+    updated_count = max(len(repos_to_process) - new_count, 0)
     duration = time.time() - start_time
 
     return {
