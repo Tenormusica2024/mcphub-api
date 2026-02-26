@@ -4,7 +4,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr
 
-from app.auth import generate_api_key, hash_api_key, verify_api_key, verify_api_key_readonly
+from app.auth import generate_api_key, hash_api_key, verify_api_key_readonly
 from app.db import get_supabase
 from datetime import datetime, timezone
 
@@ -16,7 +16,7 @@ PLAN_LIMITS = {
     "free": 100,
     "basic": 5000,
     "pro": 30000,
-    "enterprise": None,  # 無制限
+    "enterprise": 0,  # 無制限（0 = 上限なし）
 }
 
 

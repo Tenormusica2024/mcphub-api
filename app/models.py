@@ -33,17 +33,6 @@ class MCPServerList(BaseModel):
     items: list[MCPServer]
 
 
-class HealthCheckResult(BaseModel):
-    server_id: str
-    server_name: str
-    repo_url: str
-    status: str
-    response_time_ms: Optional[int] = None
-    http_status: Optional[int] = None
-    error_message: Optional[str] = None
-    checked_at: datetime
-
-
 class CrawlResult(BaseModel):
     total_found: int
     new_servers: int

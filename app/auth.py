@@ -18,6 +18,15 @@ def generate_api_key() -> str:
     return f"mhub_{secrets.token_urlsafe(32)}"
 
 
+def _require_api_key(x_api_key: Optional[str]) -> None:
+    """APIキーヘッダーの存在チェック（両verify関数で共用）"""
+    if not x_api_key:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing X-API-Key header. Register at POST /auth/register",
+        )
+
+
 def hash_api_key(raw_key: str) -> str:
     """APIキーをSHA256でハッシュ化してDBに保存する形式に変換"""
     return hashlib.sha256(raw_key.encode()).hexdigest()
@@ -33,11 +42,7 @@ async def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Ke
       - レート制限チェック
       - req_count のアトミックなインクリメント
     """
-    if not x_api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing X-API-Key header. Register at POST /auth/register",
-        )
+    _require_api_key(x_api_key)
 
     key_hash = hash_api_key(x_api_key)
 
@@ -74,11 +79,7 @@ async def verify_api_key_readonly(x_api_key: Optional[str] = Header(None, alias=
     APIキー認証のみ（req_count をインクリメントしない）。
     GET /auth/usage など「確認系」エンドポイント専用。
     """
-    if not x_api_key:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing X-API-Key header. Register at POST /auth/register",
-        )
+    _require_api_key(x_api_key)
 
     key_hash = hash_api_key(x_api_key)
 

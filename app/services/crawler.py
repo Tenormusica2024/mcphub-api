@@ -161,6 +161,8 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
         db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
     )
 
+    # 全レコードを先にリスト化
+    records = []
     for repo in repos_to_process:
         topics = repo.get("topics", [])
         name = repo.get("name", "")
@@ -168,7 +170,7 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
         owner = repo.get("owner", {}).get("login", "")
         repo_url = repo.get("html_url", "")
 
-        server_data = {
+        records.append({
             "name": name,
             "repo_url": repo_url,
             "description": description[:500] if description else None,  # 500文字制限
@@ -179,15 +181,18 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
             "topics": topics,
             "is_active": not repo.get("archived", False),
             "last_crawled_at": datetime.now(timezone.utc).isoformat(),
-        }
+        })
 
+    # 100件チャンクでバルクupsert（500個別往復 → 最大5往復に削減）
+    for i in range(0, len(records), 100):
+        chunk = records[i:i + 100]
         try:
-            db.table("mcp_servers").upsert(
-                server_data,
-                on_conflict="repo_url",
-            ).execute()
+            db.table("mcp_servers").upsert(chunk, on_conflict="repo_url").execute()
         except Exception as e:
-            logger.warning("DB upsert failed for %s: %s: %s", repo_url, type(e).__name__, e, exc_info=True)
+            logger.warning(
+                "DB bulk upsert failed for chunk %d-%d: %s: %s",
+                i, i + len(chunk) - 1, type(e).__name__, e, exc_info=True,
+            )
 
     # upsert後の件数で新規追加数を算出（head=True でデータ転送なし）
     count_after = (

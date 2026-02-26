@@ -1,6 +1,7 @@
 """管理者向け API（クローラー起動・ヘルスチェック起動）"""
 
 import hmac
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from app.config import settings
 from app.services.crawler import crawl_mcp_servers
@@ -10,8 +11,10 @@ from app.models import CrawlResult
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def verify_admin_key(x_admin_key: str = Header(..., alias="X-Admin-Key")):
+def verify_admin_key(x_admin_key: Optional[str] = Header(None, alias="X-Admin-Key")):
     """管理者APIキー認証（タイミング攻撃対策: hmac.compare_digest使用）"""
+    if not x_admin_key:
+        raise HTTPException(status_code=401, detail="Missing X-Admin-Key header")
     if not hmac.compare_digest(x_admin_key, settings.admin_api_key):
         raise HTTPException(status_code=401, detail="Invalid admin key")
     return x_admin_key

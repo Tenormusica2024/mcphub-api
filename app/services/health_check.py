@@ -1,6 +1,7 @@
 """MCP サーバーのヘルスチェックサービス（並列実行対応）"""
 
 import asyncio
+import logging
 import time
 from datetime import datetime, timezone
 
@@ -8,6 +9,8 @@ import httpx
 
 from app.config import settings
 from app.db import get_supabase
+
+logger = logging.getLogger(__name__)
 
 async def _check_single_server(
     client: httpx.AsyncClient,
@@ -97,20 +100,28 @@ async def run_health_checks(server_ids: list[str] | None = None) -> dict:
         tasks = [bounded_check(client, s) for s in servers]
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
-    # 正常な結果のみ抽出
-    valid_results = [r for r in raw_results if isinstance(r, dict)]
+    # 正常な結果のみ抽出（server_id が None のレコードも除外）
+    valid_results = [
+        r for r in raw_results if isinstance(r, dict) and r.get("server_id")
+    ]
 
     # health_checks テーブルに一括保存
     if valid_results:
-        db.table("health_checks").insert(valid_results).execute()
+        try:
+            db.table("health_checks").insert(valid_results).execute()
+        except Exception as e:
+            logger.error("health_checks INSERT failed: %s", e, exc_info=True)
 
     # mcp_servers.is_active を更新（up/down のみ、unknown は現状維持）
     up_ids = [r["server_id"] for r in valid_results if r["status"] == "up"]
     down_ids = [r["server_id"] for r in valid_results if r["status"] == "down"]
-    if up_ids:
-        db.table("mcp_servers").update({"is_active": True}).in_("id", up_ids).execute()
-    if down_ids:
-        db.table("mcp_servers").update({"is_active": False}).in_("id", down_ids).execute()
+    try:
+        if up_ids:
+            db.table("mcp_servers").update({"is_active": True}).in_("id", up_ids).execute()
+        if down_ids:
+            db.table("mcp_servers").update({"is_active": False}).in_("id", down_ids).execute()
+    except Exception as e:
+        logger.error("mcp_servers is_active UPDATE failed: %s", e, exc_info=True)
 
     # サマリー集計
     up = len(up_ids)

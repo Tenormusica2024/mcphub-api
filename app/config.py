@@ -11,7 +11,6 @@ class Settings(BaseSettings):
     admin_api_key: str               # 必須・デフォルト値なし（本番は必ず環境変数で設定すること）
     api_base_url: str = "https://mcphub-api-ycqe3vmjva-an.a.run.app"
     crawl_max_servers: int = 500
-    health_check_interval_min: int = 60
     health_check_timeout_sec: int = 10
     health_check_concurrency: int = 20
 
