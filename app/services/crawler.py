@@ -1,4 +1,4 @@
-"""GitHub API を使った MCP サーバークローラー"""
+"""GitHub API を使った MCP サーバー・Claude Skills クローラー"""
 
 import asyncio
 import logging
@@ -14,12 +14,21 @@ from app.db import get_supabase
 logger = logging.getLogger(__name__)
 
 # MCPサーバーを発見するためのGitHub検索クエリ群
-SEARCH_QUERIES = [
+MCP_SEARCH_QUERIES = [
     "topic:mcp-server",
     "topic:model-context-protocol",
     "mcp server in:name,description",
     "model context protocol server in:name,description",
     "mcp-server in:name",
+]
+
+# Claude Skillsを発見するためのGitHub検索クエリ群
+CLAUDE_SKILLS_QUERIES = [
+    "topic:claude-skill",
+    "topic:claude-code-skill",
+    "topic:claude-code-skills",
+    "claude code skill in:name,description",
+    "claude-code skill in:name",
 ]
 
 GITHUB_API_BASE = "https://api.github.com"
@@ -131,43 +140,47 @@ def _classify_category(topics: list[str], name: str, description: str) -> str:
     return "other"
 
 
-async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
-    """GitHub APIからMCPサーバーを収集してSupabaseに保存"""
-    max_servers = max_servers or settings.crawl_max_servers
+async def _crawl_and_save(
+    queries: list[str],
+    tool_type: str,
+    max_count: int,
+    db,
+) -> dict:
+    """共通クロール＆Supabase保存ロジック（MCP・Claude Skills で共用）"""
     start_time = time.time()
-    db = get_supabase()
-
     all_repos: dict[str, RepoData] = {}  # repo_url → repo_data（重複排除）
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        for i, query in enumerate(SEARCH_QUERIES):
+        for i, query in enumerate(queries):
             repos = await _search_repos(
                 client,
                 query,
-                max_results=max_servers,
+                max_results=max_count,
                 token_index=i,
             )
             for repo in repos:
                 url = repo.get("html_url", "")
                 if url and url not in all_repos:
                     all_repos[url] = repo
-            if len(all_repos) >= max_servers:
+            if len(all_repos) >= max_count:
                 break
             await asyncio.sleep(1)
 
-    repos_to_process = list(all_repos.values())[:max_servers]
+    repos_to_process = list(all_repos.values())[:max_count]
 
-    # upsert前の件数を取得（head=True でデータ転送なし・カウントのみ）
+    # upsert前の件数を tool_type でフィルタして取得
     try:
         count_before = (
-            db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
+            db.table("mcp_servers")
+            .select("*", count="exact", head=True)
+            .eq("tool_type", tool_type)
+            .execute()
+            .count or 0
         )
     except Exception as e:
-        # 集計失敗でもクロール（upsert）は継続する
         logger.warning("count_before query failed, defaulting to 0: %s", e)
         count_before = 0
 
-    # 全レコードを先にリスト化
     records = []
     for repo in repos_to_process:
         topics = repo.get("topics", [])
@@ -186,6 +199,7 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
             "repo_name": name,
             "topics": topics,
             "is_active": not repo.get("archived", False),
+            "tool_type": tool_type,
             "last_crawled_at": datetime.now(timezone.utc).isoformat(),
         })
 
@@ -200,14 +214,19 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
                 i, i + len(chunk) - 1, type(e).__name__, e, exc_info=True,
             )
 
-    # upsert後の件数で新規追加数を算出（head=True でデータ転送なし）
+    # upsert後の件数で新規追加数を算出
     try:
         count_after = (
-            db.table("mcp_servers").select("*", count="exact", head=True).execute().count or 0
+            db.table("mcp_servers")
+            .select("*", count="exact", head=True)
+            .eq("tool_type", tool_type)
+            .execute()
+            .count or 0
         )
     except Exception as e:
         logger.warning("count_after query failed, defaulting to count_before: %s", e)
         count_after = count_before
+
     new_count = max(count_after - count_before, 0)
     # 並走クローラーによる count 乖離で負値にならないよう max(0, ...) でガード
     updated_count = max(len(repos_to_process) - new_count, 0)
@@ -220,3 +239,17 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
         "total_in_db": count_after,
         "duration_sec": round(duration, 2),
     }
+
+
+async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
+    """GitHub APIからMCPサーバーを収集してSupabaseに保存"""
+    max_servers = max_servers or settings.crawl_max_servers
+    db = get_supabase()
+    return await _crawl_and_save(MCP_SEARCH_QUERIES, "mcp", max_servers, db)
+
+
+async def crawl_claude_skills(max_skills: int | None = None) -> dict:
+    """GitHub APIからClaude Skillsを収集してSupabaseに保存"""
+    max_skills = max_skills or settings.crawl_max_servers
+    db = get_supabase()
+    return await _crawl_and_save(CLAUDE_SKILLS_QUERIES, "claude_skill", max_skills, db)

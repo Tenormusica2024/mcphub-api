@@ -31,9 +31,14 @@ D:\antigravity_projects\VaultD\Projects\Monetization\monetization-brainstorm-mas
 - **検索APIのみリリース**（ヘルスチェックはOpt-in登録済みサーバーのみ）
 - 有料ユーザー5人獲得で継続判断
 
-### Phase 2（将来）
-- Claude Skills も対象に含めた「AI Agent Tooling Registry API」へ拡張
-- データモデルは最初から「AIツール全般」に抽象化しておくと良い（ピボット容易化）
+### Phase 2（READY → 実装計画中）
+- **製品: AIエージェント向けキュレーションAPI**（MCP + Claude Skills を品質スコア順で返すAPI）
+- **コンセプト**: AIエージェントが「コードレビューに最適なSkillを取得して」と指示するだけで、品質スコア順の最適ツールが返ってくる。現状のweb検索の当たり外れをなくす
+- **ポジション**: Anthropic Tool Search Tool（Claude内蔵）を補完する「質の高いカタログ」。競合ゼロ確認済み（2026-02-28）
+- **スコープ**: MVP = MCP + Claude Skills（npm AI CLIは混在するとノイズになるため除外）
+- **スコアリング**: GitHubスター + 更新頻度 + smithery.ai使用回数 + タスク意図一致度embedding
+- **戦略**: ステルス開発 → Lv3（蓄積データが模倣困難な資産）到達後に公開
+- **詳細**: `monetization-brainstorm-master.md` Round 5 参照
 
 ---
 

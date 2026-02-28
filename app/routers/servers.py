@@ -16,13 +16,15 @@ router = APIRouter(prefix="/servers", tags=["servers"])
 VALID_CATEGORIES = {"database", "browser", "filesystem", "code", "productivity", "api", "search", "other"}
 VALID_SORT = {"stars", "name", "last_crawled_at"}
 VALID_HEALTH = {"up", "down", "unknown"}
+VALID_TOOL_TYPES = {"mcp", "claude_skill"}
 
 
-@router.get("", response_model=MCPServerList, summary="MCP サーバー一覧取得")
+@router.get("", response_model=MCPServerList, summary="MCP サーバー・Claude Skills 一覧取得")
 async def list_servers(
     category: Optional[str] = Query(None, description="カテゴリフィルタ"),
     q: Optional[str] = Query(None, description="名前・説明の部分一致検索"),
     health: Optional[str] = Query(None, description="ヘルスステータスフィルタ (up/down/unknown)"),
+    tool_type: Optional[str] = Query(None, description="ツールタイプフィルタ (mcp/claude_skill)"),
     sort: str = Query("stars", description="ソート項目 (stars/name/last_crawled_at)"),
     page: int = Query(1, ge=1, description="ページ番号"),
     per_page: int = Query(20, ge=1, le=100, description="1ページの件数"),
@@ -34,6 +36,8 @@ async def list_servers(
         raise HTTPException(status_code=400, detail=f"Invalid sort. Valid: {sorted(VALID_SORT)}")
     if health and health not in VALID_HEALTH:
         raise HTTPException(status_code=400, detail=f"Invalid health. Valid: {sorted(VALID_HEALTH)}")
+    if tool_type and tool_type not in VALID_TOOL_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid tool_type. Valid: {sorted(VALID_TOOL_TYPES)}")
 
     db = get_supabase()
     offset = (page - 1) * per_page
@@ -41,6 +45,8 @@ async def list_servers(
     # mcp_servers_with_health ビューから取得
     query = db.table("mcp_servers_with_health").select("*", count="exact").eq("is_active", True)
 
+    if tool_type:
+        query = query.eq("tool_type", tool_type)
     if category:
         query = query.eq("category", category)
     if q:

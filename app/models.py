@@ -16,6 +16,7 @@ class MCPServer(BaseModel):
     repo_name: Optional[str] = None
     topics: list[str] = []
     readme_summary: Optional[str] = None  # 将来機能（クローラー未実装・DB列は存在）
+    tool_type: str = "mcp"  # 'mcp' または 'claude_skill'
     is_active: bool = True
     health_check_opt_in: bool = False
     last_crawled_at: Optional[datetime] = None

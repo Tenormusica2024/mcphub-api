@@ -4,7 +4,7 @@ import hmac
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from app.config import settings
-from app.services.crawler import crawl_mcp_servers
+from app.services.crawler import crawl_mcp_servers, crawl_claude_skills
 from app.services.health_check import run_health_checks
 from app.models import CrawlResult, HealthCheckResult
 
@@ -22,12 +22,32 @@ def verify_admin_key(x_admin_key: Optional[str] = Header(None, alias="X-Admin-Ke
 
 @router.post("/crawl", summary="GitHub APIクローラー起動（管理者専用）", response_model=CrawlResult)
 async def trigger_crawl(
-    max_servers: int = Query(default=500, ge=1, le=1000),
+    max_servers: int = Query(default=500, ge=1, le=1000, description="クロール最大件数"),
+    tool_type: str = Query(default="all", description="クロール対象 (all/mcp/claude_skill)"),
     _: str = Depends(verify_admin_key),
 ):
-    """GitHub から MCP サーバーを収集して DB に保存する"""
-    result = await crawl_mcp_servers(max_servers=max_servers)
-    return result
+    """GitHub から MCP サーバー・Claude Skills を収集して DB に保存する"""
+    if tool_type not in {"all", "mcp", "claude_skill"}:
+        raise HTTPException(status_code=400, detail="Invalid tool_type. Valid: all, mcp, claude_skill")
+
+    mcp_result = None
+    skills_result = None
+
+    if tool_type in {"all", "mcp"}:
+        mcp_result = await crawl_mcp_servers(max_servers=max_servers)
+    if tool_type in {"all", "claude_skill"}:
+        skills_result = await crawl_claude_skills(max_skills=max_servers)
+
+    # tool_type=all のとき両結果を合算して返す
+    if mcp_result and skills_result:
+        return CrawlResult(
+            total_found=mcp_result["total_found"] + skills_result["total_found"],
+            new_servers=mcp_result["new_servers"] + skills_result["new_servers"],
+            updated_servers=mcp_result["updated_servers"] + skills_result["updated_servers"],
+            total_in_db=mcp_result["total_in_db"] + skills_result["total_in_db"],
+            duration_sec=round(mcp_result["duration_sec"] + skills_result["duration_sec"], 2),
+        )
+    return CrawlResult(**(mcp_result or skills_result))
 
 
 @router.post("/health-check", summary="ヘルスチェック起動（管理者専用）", response_model=HealthCheckResult)
