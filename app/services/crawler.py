@@ -10,6 +10,7 @@ import httpx
 from supabase import Client
 
 from app.config import settings
+from app.constants import TOOL_TYPE_MCP, TOOL_TYPE_CLAUDE_SKILL, ToolType
 from app.db import get_supabase
 
 logger = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ def _classify_category(topics: list[str], name: str, description: str) -> str:
 
 async def _crawl_and_save(
     queries: list[str],
-    tool_type: str,
+    tool_type: ToolType,
     max_count: int,
     db: Client,
 ) -> dict:
@@ -195,7 +196,7 @@ async def _crawl_and_save(
             "repo_url": repo_url,
             "description": description[:500] if description else None,  # 500文字制限
             # claude_skill は MCP 向け分類器が "code" に偏重するため "other" で固定
-            "category": _classify_category(topics, name, description) if tool_type == "mcp" else "other",
+            "category": _classify_category(topics, name, description) if tool_type == TOOL_TYPE_MCP else "other",
             "stars": repo.get("stargazers_count", 0),
             "owner": owner,
             "repo_name": name,
@@ -247,11 +248,11 @@ async def crawl_mcp_servers(max_servers: int | None = None) -> dict:
     """GitHub APIからMCPサーバーを収集してSupabaseに保存"""
     max_servers = max_servers or settings.crawl_max_servers
     db = get_supabase()
-    return await _crawl_and_save(MCP_SEARCH_QUERIES, "mcp", max_servers, db)
+    return await _crawl_and_save(MCP_SEARCH_QUERIES, TOOL_TYPE_MCP, max_servers, db)
 
 
 async def crawl_claude_skills(max_skills: int | None = None) -> dict:
     """GitHub APIからClaude Skillsを収集してSupabaseに保存"""
     max_skills = max_skills or settings.crawl_max_servers
     db = get_supabase()
-    return await _crawl_and_save(CLAUDE_SKILLS_QUERIES, "claude_skill", max_skills, db)
+    return await _crawl_and_save(CLAUDE_SKILLS_QUERIES, TOOL_TYPE_CLAUDE_SKILL, max_skills, db)

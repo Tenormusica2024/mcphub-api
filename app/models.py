@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr
+from app.constants import TOOL_TYPE_MCP
 
 
 class MCPServer(BaseModel):
@@ -16,7 +17,7 @@ class MCPServer(BaseModel):
     repo_name: Optional[str] = None
     topics: list[str] = []
     readme_summary: Optional[str] = None  # 将来機能（クローラー未実装・DB列は存在）
-    tool_type: str = "mcp"  # 'mcp' または 'claude_skill'
+    tool_type: str = TOOL_TYPE_MCP  # 'mcp' または 'claude_skill'
     is_active: bool = True
     health_check_opt_in: bool = False
     last_crawled_at: Optional[datetime] = None

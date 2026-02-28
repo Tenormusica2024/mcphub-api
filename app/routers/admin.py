@@ -1,11 +1,12 @@
 """管理者向け API（クローラー起動・ヘルスチェック起動）"""
 
+import asyncio
 import hmac
 import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from app.config import settings
-from app.constants import VALID_CRAWL_TARGETS
+from app.constants import TOOL_TYPE_MCP, TOOL_TYPE_CLAUDE_SKILL, VALID_CRAWL_TARGETS
 from app.services.crawler import crawl_mcp_servers, crawl_claude_skills
 from app.services.health_check import run_health_checks
 from app.models import CrawlResult, HealthCheckResult
@@ -27,27 +28,38 @@ def verify_admin_key(x_admin_key: Optional[str] = Header(None, alias="X-Admin-Ke
 @router.post("/crawl", summary="GitHub APIクローラー起動（管理者専用）", response_model=CrawlResult)
 async def trigger_crawl(
     max_servers: int = Query(default=500, ge=1, le=1000, description="クロール最大件数"),
-    tool_type: str = Query(default="all", description="クロール対象 (all/mcp/claude_skill)"),
+    tool_type: str = Query(
+        default="all",
+        description=f"クロール対象 ({'/'.join(sorted(VALID_CRAWL_TARGETS))})",
+    ),
     _: str = Depends(verify_admin_key),
 ):
     """GitHub から MCP サーバー・Claude Skills を収集して DB に保存する"""
     if tool_type not in VALID_CRAWL_TARGETS:
         raise HTTPException(status_code=400, detail=f"Invalid tool_type. Valid: {sorted(VALID_CRAWL_TARGETS)}")
 
+    # 実行するクローラーを決定
+    labels: list[str] = []
+    coros = []
+    if tool_type in {"all", TOOL_TYPE_MCP}:
+        labels.append(TOOL_TYPE_MCP)
+        coros.append(crawl_mcp_servers(max_servers=max_servers))
+    if tool_type in {"all", TOOL_TYPE_CLAUDE_SKILL}:
+        labels.append(TOOL_TYPE_CLAUDE_SKILL)
+        coros.append(crawl_claude_skills(max_skills=max_servers))
+
+    # 両クローラーを並列実行（return_exceptions=True で片方失敗でも継続）
+    raw = await asyncio.gather(*coros, return_exceptions=True)
+
     mcp_result = None
     skills_result = None
-
-    # 各クローラーを個別に try/catch: 片方失敗でも他方の結果を返せるようにする
-    if tool_type in {"all", "mcp"}:
-        try:
-            mcp_result = await crawl_mcp_servers(max_servers=max_servers)
-        except Exception as e:
-            logger.error("MCP crawl failed: %s", e, exc_info=True)
-    if tool_type in {"all", "claude_skill"}:
-        try:
-            skills_result = await crawl_claude_skills(max_skills=max_servers)
-        except Exception as e:
-            logger.error("Claude Skills crawl failed: %s", e, exc_info=True)
+    for label, result in zip(labels, raw):
+        if isinstance(result, Exception):
+            logger.error("%s crawl failed: %s", label, result, exc_info=result)
+        elif label == TOOL_TYPE_MCP:
+            mcp_result = result
+        else:
+            skills_result = result
 
     # 両方失敗した場合はエラー
     if mcp_result is None and skills_result is None:
