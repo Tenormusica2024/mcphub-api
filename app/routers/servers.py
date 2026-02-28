@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import UUID
 from fastapi import APIRouter, Query, HTTPException, Depends
 from app.auth import verify_api_key
+from app.constants import VALID_TOOL_TYPES
 from app.db import get_supabase
 from app.models import MCPServer, MCPServerList
 
@@ -16,7 +17,6 @@ router = APIRouter(prefix="/servers", tags=["servers"])
 VALID_CATEGORIES = {"database", "browser", "filesystem", "code", "productivity", "api", "search", "other"}
 VALID_SORT = {"stars", "name", "last_crawled_at"}
 VALID_HEALTH = {"up", "down", "unknown"}
-VALID_TOOL_TYPES = {"mcp", "claude_skill"}
 
 
 @router.get("", response_model=MCPServerList, summary="MCP サーバー・Claude Skills 一覧取得")

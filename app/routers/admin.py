@@ -1,12 +1,16 @@
 """管理者向け API（クローラー起動・ヘルスチェック起動）"""
 
 import hmac
+import logging
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
 from app.config import settings
+from app.constants import VALID_CRAWL_TARGETS
 from app.services.crawler import crawl_mcp_servers, crawl_claude_skills
 from app.services.health_check import run_health_checks
 from app.models import CrawlResult, HealthCheckResult
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -27,19 +31,30 @@ async def trigger_crawl(
     _: str = Depends(verify_admin_key),
 ):
     """GitHub から MCP サーバー・Claude Skills を収集して DB に保存する"""
-    if tool_type not in {"all", "mcp", "claude_skill"}:
-        raise HTTPException(status_code=400, detail="Invalid tool_type. Valid: all, mcp, claude_skill")
+    if tool_type not in VALID_CRAWL_TARGETS:
+        raise HTTPException(status_code=400, detail=f"Invalid tool_type. Valid: {sorted(VALID_CRAWL_TARGETS)}")
 
     mcp_result = None
     skills_result = None
 
+    # 各クローラーを個別に try/catch: 片方失敗でも他方の結果を返せるようにする
     if tool_type in {"all", "mcp"}:
-        mcp_result = await crawl_mcp_servers(max_servers=max_servers)
+        try:
+            mcp_result = await crawl_mcp_servers(max_servers=max_servers)
+        except Exception as e:
+            logger.error("MCP crawl failed: %s", e, exc_info=True)
     if tool_type in {"all", "claude_skill"}:
-        skills_result = await crawl_claude_skills(max_skills=max_servers)
+        try:
+            skills_result = await crawl_claude_skills(max_skills=max_servers)
+        except Exception as e:
+            logger.error("Claude Skills crawl failed: %s", e, exc_info=True)
+
+    # 両方失敗した場合はエラー
+    if mcp_result is None and skills_result is None:
+        raise HTTPException(status_code=503, detail="All crawlers failed")
 
     # tool_type=all のとき両結果を合算して返す
-    if mcp_result and skills_result:
+    if mcp_result is not None and skills_result is not None:
         return CrawlResult(
             total_found=mcp_result["total_found"] + skills_result["total_found"],
             new_servers=mcp_result["new_servers"] + skills_result["new_servers"],
@@ -47,7 +62,8 @@ async def trigger_crawl(
             total_in_db=mcp_result["total_in_db"] + skills_result["total_in_db"],
             duration_sec=round(mcp_result["duration_sec"] + skills_result["duration_sec"], 2),
         )
-    return CrawlResult(**(mcp_result or skills_result))
+    result = mcp_result if mcp_result is not None else skills_result
+    return CrawlResult(**result)
 
 
 @router.post("/health-check", summary="ヘルスチェック起動（管理者専用）", response_model=HealthCheckResult)

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import TypedDict
 
 import httpx
+from supabase import Client
 
 from app.config import settings
 from app.db import get_supabase
@@ -93,7 +94,7 @@ async def _search_repos(
             if resp.status_code == 403:
                 # レート制限 → 別トークンでリトライ（上限を超えたら中断）
                 retries_on_403 += 1
-                if retries_on_403 > max_retries_on_403:
+                if retries_on_403 >= max_retries_on_403:
                     logger.warning("GitHub 403 rate limit exceeded after %d retries, stopping query: %s", retries_on_403, query)
                     break
                 token_index += 1
@@ -144,7 +145,7 @@ async def _crawl_and_save(
     queries: list[str],
     tool_type: str,
     max_count: int,
-    db,
+    db: Client,
 ) -> dict:
     """共通クロール＆Supabase保存ロジック（MCP・Claude Skills で共用）"""
     start_time = time.time()
@@ -193,7 +194,8 @@ async def _crawl_and_save(
             "name": name,
             "repo_url": repo_url,
             "description": description[:500] if description else None,  # 500文字制限
-            "category": _classify_category(topics, name, description),
+            # claude_skill は MCP 向け分類器が "code" に偏重するため "other" で固定
+            "category": _classify_category(topics, name, description) if tool_type == "mcp" else "other",
             "stars": repo.get("stargazers_count", 0),
             "owner": owner,
             "repo_name": name,
