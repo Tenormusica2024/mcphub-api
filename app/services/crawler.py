@@ -46,6 +46,10 @@ class RepoData(TypedDict):
     name: str
     description: str | None
     stargazers_count: int
+    forks_count: int
+    open_issues_count: int
+    pushed_at: str | None    # ISO 8601 文字列
+    created_at: str | None   # ISO 8601 文字列
     topics: list[str]
     archived: bool
     owner: dict
@@ -198,6 +202,9 @@ async def _crawl_and_save(
             # claude_skill は MCP 向け分類器が "code" に偏重するため "other" で固定
             "category": _classify_category(topics, name, description) if tool_type == TOOL_TYPE_MCP else "other",
             "stars": repo.get("stargazers_count", 0),
+            "fork_count": repo.get("forks_count", 0),
+            "open_issues": repo.get("open_issues_count", 0),
+            "pushed_at": repo.get("pushed_at"),    # ISO 8601 文字列のまま保存
             "owner": owner,
             "repo_name": name,
             "topics": topics,

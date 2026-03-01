@@ -6,6 +6,14 @@ from pydantic import BaseModel, EmailStr
 from app.constants import TOOL_TYPE_MCP
 
 
+class ScoreBreakdown(BaseModel):
+    """quality_score の4次元内訳（0〜100）"""
+    popularity:      float = 0.0  # stars + forks
+    velocity:        float = 0.0  # 直近7日スター増加 + プッシュ鮮度
+    maintenance:     float = 0.0  # open_issues の少なさ
+    content_quality: float = 0.0  # Claude Code によるSKILL.md品質評価
+
+
 class MCPServer(BaseModel):
     id: str
     name: str
@@ -13,6 +21,8 @@ class MCPServer(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     stars: int = 0
+    fork_count: int = 0
+    open_issues: int = 0
     owner: Optional[str] = None
     repo_name: Optional[str] = None
     topics: list[str] = []
@@ -20,8 +30,15 @@ class MCPServer(BaseModel):
     tool_type: str = TOOL_TYPE_MCP  # 'mcp' または 'claude_skill'
     is_active: bool = True
     health_check_opt_in: bool = False
+    pushed_at: Optional[datetime] = None
     last_crawled_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    # スコアリング（scorer_updater.py が毎日更新）
+    quality_score: float = 0.0
+    velocity_7d: int = 0           # 直近7日のスター増加数
+    score_breakdown: Optional[ScoreBreakdown] = None
+    rank_in_category: Optional[int] = None
+    score_updated_at: Optional[datetime] = None
     # ヘルスチェック情報（mcp_servers_with_health ビューから取得）
     health_status: Optional[str] = None
     last_response_time_ms: Optional[int] = None

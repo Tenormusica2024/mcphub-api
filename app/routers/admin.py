@@ -9,6 +9,7 @@ from app.config import settings
 from app.constants import TOOL_TYPE_MCP, TOOL_TYPE_CLAUDE_SKILL, VALID_CRAWL_TARGETS
 from app.services.crawler import crawl_mcp_servers, crawl_claude_skills
 from app.services.health_check import run_health_checks
+from app.services.scorer_updater import update_all_scores
 from app.models import CrawlResult, HealthCheckResult
 
 logger = logging.getLogger(__name__)
@@ -82,4 +83,13 @@ async def trigger_crawl(
 async def trigger_health_check(_: str = Depends(verify_admin_key)):
     """全サーバーのヘルスチェックを並列実行する"""
     result = await run_health_checks()
+    return result
+
+
+@router.post("/update-scores", summary="スコア再計算（管理者専用）")
+async def trigger_score_update(_: str = Depends(verify_admin_key)):
+    """全アクティブレコードの quality_score を再計算する。
+    毎日クロール後に Task Scheduler から呼び出すことを想定している。
+    """
+    result = await update_all_scores()
     return result

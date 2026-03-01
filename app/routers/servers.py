@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/servers", tags=["servers"])
 
 VALID_CATEGORIES = {"database", "browser", "filesystem", "code", "productivity", "api", "search", "other"}
-VALID_SORT = {"stars", "name", "last_crawled_at"}
+VALID_SORT = {"stars", "name", "last_crawled_at", "quality_score", "velocity_7d"}
 VALID_HEALTH = {"up", "down", "unknown"}
 
 
@@ -59,8 +59,9 @@ async def list_servers(
     if health:
         query = query.eq("health_status", health)
 
-    # ソート（starsは降順、その他は昇順）
-    query = query.order(sort, desc=(sort == "stars"))
+    # ソート（数値系は降順、名前系は昇順）
+    desc_sorts = {"stars", "quality_score", "velocity_7d"}
+    query = query.order(sort, desc=(sort in desc_sorts))
 
     # ページネーション
     query = query.range(offset, offset + per_page - 1)
