@@ -35,22 +35,30 @@ async def update_all_scores() -> dict:
     start = time.time()
     db = get_supabase()
 
-    # is_active なレコードを全件取得
+    # is_active なレコードを全件取得（ページネーションでサーバー上限(1000)を回避）
+    rows: list[dict] = []
+    page_size = 1000
+    offset = 0
     try:
-        result = (
-            db.table("mcp_servers")
-            .select(
-                "id, stars, fork_count, open_issues, stars_7d_ago, "
-                "pushed_at, created_at, score_breakdown, quality_score"
+        while True:
+            result = (
+                db.table("mcp_servers")
+                .select(
+                    "id, stars, fork_count, open_issues, stars_7d_ago, "
+                    "pushed_at, created_at, score_breakdown, quality_score"
+                )
+                .eq("is_active", True)
+                .range(offset, offset + page_size - 1)
+                .execute()
             )
-            .eq("is_active", True)
-            .execute()
-        )
+            page = result.data or []
+            rows.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
     except Exception as e:
         logger.error("Failed to fetch mcp_servers for scoring: %s", e, exc_info=True)
         return {"updated": 0, "skipped": 0, "errors": 1, "duration_sec": 0.0}
-
-    rows = result.data or []
     logger.info("Scoring %d active records", len(rows))
 
     updated = 0
@@ -99,15 +107,16 @@ async def update_all_scores() -> dict:
             logger.warning("Score calc failed for id=%s: %s", row.get("id"), e)
             errors += 1
 
-    # 100件チャンクでバルク更新
-    for i in range(0, len(updates), 100):
-        chunk = updates[i:i + 100]
+    # 個別 update（upsert は default_to_null=True で NOT NULL 制約に抵触するため使わない）
+    for record in updates:
         try:
-            db.table("mcp_servers").upsert(chunk, on_conflict="id").execute()
+            record_id = record["id"]
+            score_fields = {k: v for k, v in record.items() if k != "id"}
+            db.table("mcp_servers").update(score_fields).eq("id", record_id).execute()
         except Exception as e:
-            logger.warning("Score upsert failed for chunk %d-%d: %s", i, i + len(chunk), e)
-            errors += len(chunk)
-            updated -= len(chunk)
+            logger.warning("Score update failed for id=%s: %s", record.get("id"), e)
+            errors += 1
+            updated -= 1
 
     # カテゴリ別 rank_in_category を付与
     await _update_ranks(db)
@@ -125,14 +134,25 @@ async def update_all_scores() -> dict:
 
 async def _update_ranks(db) -> None:
     """カテゴリ × tool_type ごとに quality_score 降順で rank_in_category を付与する"""
+    # 全件取得（ページネーションでサーバー上限を回避）
+    all_rows: list[dict] = []
+    page_size = 1000
+    offset = 0
     try:
-        result = (
-            db.table("mcp_servers")
-            .select("id, category, tool_type, quality_score")
-            .eq("is_active", True)
-            .order("quality_score", desc=True)
-            .execute()
-        )
+        while True:
+            result = (
+                db.table("mcp_servers")
+                .select("id, category, tool_type, quality_score")
+                .eq("is_active", True)
+                .order("quality_score", desc=True)
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            page = result.data or []
+            all_rows.extend(page)
+            if len(page) < page_size:
+                break
+            offset += page_size
     except Exception as e:
         logger.warning("rank fetch failed: %s", e)
         return
@@ -141,17 +161,18 @@ async def _update_ranks(db) -> None:
     group_counters: dict[tuple, int] = {}
     rank_updates: list[dict] = []
 
-    for row in (result.data or []):
+    for row in all_rows:
         key = (row.get("category") or "other", row.get("tool_type") or "")
         group_counters[key] = group_counters.get(key, 0) + 1
         rank_updates.append({"id": row["id"], "rank_in_category": group_counters[key]})
 
-    for i in range(0, len(rank_updates), 100):
-        chunk = rank_updates[i:i + 100]
+    for record in rank_updates:
         try:
-            db.table("mcp_servers").upsert(chunk, on_conflict="id").execute()
+            db.table("mcp_servers").update(
+                {"rank_in_category": record["rank_in_category"]}
+            ).eq("id", record["id"]).execute()
         except Exception as e:
-            logger.warning("rank upsert failed: %s", e)
+            logger.warning("rank update failed for id=%s: %s", record.get("id"), e)
 
 
 async def _save_snapshot_if_needed(db) -> None:
@@ -174,14 +195,23 @@ async def _save_snapshot_if_needed(db) -> None:
     except Exception as e:
         logger.warning("snapshot check failed: %s", e)
 
-    # スナップショット保存
+    # スナップショット保存（ページネーションで全件取得）
     try:
-        result = (
-            db.table("mcp_servers")
-            .select("id, quality_score, rank_in_category")
-            .eq("is_active", True)
-            .execute()
-        )
+        snap_rows: list[dict] = []
+        offset = 0
+        while True:
+            result = (
+                db.table("mcp_servers")
+                .select("id, quality_score, rank_in_category")
+                .eq("is_active", True)
+                .range(offset, offset + 999)
+                .execute()
+            )
+            page = result.data or []
+            snap_rows.extend(page)
+            if len(page) < 1000:
+                break
+            offset += 1000
         snapshots = [
             {
                 "server_id":        row["id"],
@@ -189,7 +219,7 @@ async def _save_snapshot_if_needed(db) -> None:
                 "rank_in_category": row.get("rank_in_category"),
                 "recorded_at":      datetime.now(timezone.utc).isoformat(),
             }
-            for row in (result.data or [])
+            for row in snap_rows
         ]
         for i in range(0, len(snapshots), 100):
             db.table("score_history").insert(snapshots[i:i + 100]).execute()
