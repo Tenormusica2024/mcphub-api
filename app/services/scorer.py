@@ -1,10 +1,12 @@
-"""スコアリングサービス: ツールの quality_score を4次元で計算する
+"""スコアリングサービス: ツールの quality_score を計算する
 
-スコア設計（壁打ちで確定した仕様）:
-  popularity      (25%): stars + forks の人気度
-  velocity        (25%): 直近7日のスター増加 + 最終プッシュ日からの鮮度
-  maintenance     (25%): open_issues の少なさ（少ないほど高得点）
-  content_quality (25%): Claude Code によるSKILL.md品質評価（初期値 0）
+スコア設計:
+  popularity      (33%): stars + forks の人気度
+  velocity        (33%): 直近7日のスター増加（7日正規化済み）+ 最終プッシュ日からの鮮度
+  maintenance     (33%): open_issues の少なさ（少ないほど高得点）
+  content_quality (  0%): Claude Code による SKILL.md 品質評価（将来実装・現在は除外）
+
+content_quality が実装済みになった時点で各次元を 25% に再配分する。
 
 newcomer_boost:
   登録30日以内のツールは velocity スコアを 1.5 倍（上限 100）にする。
@@ -26,11 +28,12 @@ _NEWCOMER_DAYS         = 30
 _NEWCOMER_MULTIPLIER   = 1.5
 
 # 重み（合計 1.0）
+# content_quality は将来実装予定。実装後は各次元を 25% に変更する。
 _WEIGHTS = {
-    "popularity":       0.25,
-    "velocity":         0.25,
-    "maintenance":      0.25,
-    "content_quality":  0.25,
+    "popularity":      1 / 3,
+    "velocity":        1 / 3,
+    "maintenance":     1 / 3,
+    "content_quality": 0.0,
 }
 
 
@@ -68,7 +71,7 @@ def _velocity_score(
     """速度スコア: velocity_7d (60%) + プッシュ鮮度 (40%) + newcomer boost
 
     Args:
-        velocity_7d: 直近7日のスター増加数（前回クロール値との差分）
+        velocity_7d: 7日あたりのスター増加数（scorer_updater で更新間隔に基づき正規化済み）
         pushed_at: 最終コードプッシュ日時
         created_at: リポジトリ作成日時（newcomer boost 判定に使用）
     """
