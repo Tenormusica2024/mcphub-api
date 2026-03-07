@@ -1,0 +1,36 @@
+name: Scheduled Score Update
+
+on:
+  schedule:
+    # 毎日 22:00 UTC（翌 07:00 JST）。クロール（*/6h）が落ち着いた後に実行。
+    - cron: "0 22 * * *"
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: yt-transcript-demo-2025
+  SERVICE_NAME: mcphub-api
+  REGION: asia-northeast1
+
+jobs:
+  update-scores:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Run score update via Cloud Run Admin API
+        run: |
+          SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
+            --region $REGION \
+            --format='value(status.url)')
+          curl -s -X POST "$SERVICE_URL/admin/update-scores" \
+            -H "X-Admin-Key: ${{ secrets.ADMIN_API_KEY }}"
+          echo "Score update triggered: $SERVICE_URL"

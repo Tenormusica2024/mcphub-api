@@ -1,11 +1,14 @@
 """スコア更新バッチ: 全アクティブレコードの quality_score を再計算する
 
-実行タイミング（PC Task Scheduler で毎日深夜2時頃）:
-  python -m app.services.scorer_updater
+実行タイミング（GitHub Actions で毎日 22:00 UTC）:
+  POST /admin/update-scores
 
 処理フロー:
   1. mcp_servers から全アクティブレコードを取得
-  2. velocity_7d = stars - stars_7d_ago を計算（前回クロール値との差分）
+  2. velocity_7d を「7日あたりのスター増加数」に正規化
+     raw = stars - stars_7d_ago（前回更新時との差分）
+     days = 前回 score_updated_at からの経過日数（初回は velocity=0）
+     velocity_7d = round(raw / max(1, days) * 7)
   3. scorer.calc_scores() で quality_score と score_breakdown を計算
   4. 各レコードを更新（stars_7d_ago = stars も上書き → 次回計算用）
   5. カテゴリ別に rank_in_category を付与
@@ -45,7 +48,7 @@ async def update_all_scores() -> dict:
                 db.table("mcp_servers")
                 .select(
                     "id, stars, fork_count, open_issues, stars_7d_ago, "
-                    "pushed_at, created_at, score_breakdown, quality_score"
+                    "pushed_at, created_at, score_breakdown, quality_score, score_updated_at"
                 )
                 .eq("is_active", True)
                 .range(offset, offset + page_size - 1)
@@ -73,8 +76,15 @@ async def update_all_scores() -> dict:
             open_issues = row.get("open_issues") or 0
             stars_7d    = row.get("stars_7d_ago") or 0
 
-            # velocity: 今回の stars - 前回記録した stars
-            velocity_7d = max(0, stars - stars_7d)
+            # velocity_7d: 前回更新からの経過日数で割り「7日あたり」に正規化する。
+            # 初回採点（score_updated_at が NULL）は基準が不明なため 0 とする。
+            raw_velocity = max(0, stars - stars_7d)
+            prev_updated_at = _parse_dt(row.get("score_updated_at"))
+            if prev_updated_at is None:
+                velocity_7d = 0
+            else:
+                days_since = max(1, (datetime.now(timezone.utc) - prev_updated_at).days)
+                velocity_7d = round(raw_velocity / days_since * 7)
 
             pushed_at  = _parse_dt(row.get("pushed_at"))
             created_at = _parse_dt(row.get("created_at"))
